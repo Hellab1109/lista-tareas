@@ -1,0 +1,102 @@
+<!-- Front end -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>To-Do Realtime</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 0.5rem 0; }
+    .completed { text-decoration: line-through; color: gray; }
+  </style>
+</head>
+<body>
+  <h1>📋 Lista de Tareas ((To-Do List))</h1>
+
+  <form id="formularioTarea">
+    <input type="text" id="titulo" placeholder="Título" required maxlength="100" />
+    <input type="text" id="descripcion" placeholder="Descripción (opcional)" maxlength="500" />
+    <button type="submit">Agregar tarea</button>
+  </form>
+
+  <h2>Tareas</h2>
+  <ul id="listaTareas"></ul>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+
+    const listaTareas = document.getElementById("listaTareas");
+    const form = document.getElementById("formularioTarea");
+    const titulo = document.getElementById("titulo");
+    const descripcion = document.getElementById("descripcion");
+
+    const renderTarea = (tarea) => {
+      const li = document.createElement("li");
+      li.id = `tarea-${tarea.id}`;
+      li.className = tarea.status === "completada" ? "completed" : "";
+      li.innerHTML = `
+        <strong>${tarea.titulo}</strong> - ${tarea.descripcion || ""}
+        [<em>${tarea.status}</em>]
+        <button onclick="markCompleted(${tarea.id})">✔️</button>
+        <button onclick="deleteTarea(${tarea.id})">🗑️</button>
+      `;
+      return li;
+    };
+
+    const fetchTareas = async () => {
+      const res = await fetch("/tareas");
+      const tareas = await res.json();
+      listaTareas.innerHTML = "";
+      tareas.forEach(tarea => {
+        listaTareas.appendChild(renderTarea(tarea));
+      });
+    };
+
+    const markCompleted = async (id) => {
+      await fetch(`/tareas/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completada" })
+      });
+    };
+
+    const deleteTarea = async (id) => {
+      await fetch(`/tareas/${id}`, { method: "DELETE" });
+    };
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await fetch("/tareas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titulo: titulo.value, descripcion: descripcion.value })
+      });
+      titulo.value = "";
+      descripcion.value = "";
+    });
+
+    socket.on("nuevaTarea", (tarea) => {
+      listaTareas.prepend(renderTarea(tarea));
+    });
+
+    socket.on("updateTarea", ({ id, status }) => {
+      const li = document.getElementById(`tarea-${id}`);
+      if (li) {
+        li.className = status === "completada" ? "completed" : "";
+        const em = li.querySelector("em");
+        if (em) em.textContent = status;
+      }
+    });
+
+    socket.on("deleteTarea", ({ id }) => {
+      const li = document.getElementById(`tarea-${id}`);
+      if (li) li.remove();
+    });
+
+    fetchTareas();
+  </script>
+</body>
+</html>
